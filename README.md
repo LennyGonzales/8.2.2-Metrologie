@@ -1,30 +1,29 @@
 # gonzales-lenny-prometheus-grafana
 
-## Structure du rendu
+## Structure du projet
 
 ```text
-gonzales-lenny-prometheus-grafana/
-  README.md
-  kind-config.yaml
-  app/
-    main.py
-    requirements.txt
-    Dockerfile
-    .dockerignore
-    generate-traffic.sh
-  manifests/
-    00-namespaces.yaml
-    01-prometheus-rbac.yaml
-    02-prometheus-config.yaml
-    03-prometheus-deployment-service.yaml
-    04-alertmanager.yaml
-    05-node-exporter.yaml
-    06-kube-state-metrics.yaml
-    07-grafana-dashboard.yaml
-    08-grafana-deployment-service.yaml
-    09-demo-app.yaml
-  grafana/
-    dashboard.json
+README.md
+kind-config.yaml
+app/
+  main.py
+  requirements.txt
+  Dockerfile
+  .dockerignore
+  generate-traffic.sh
+manifests/
+  00-namespaces.yaml
+  01-prometheus-rbac.yaml
+  02-prometheus-config.yaml
+  03-prometheus-deployment-service.yaml
+  04-alertmanager.yaml
+  05-node-exporter.yaml
+  06-kube-state-metrics.yaml
+  07-grafana-dashboard.yaml
+  08-grafana-deployment-service.yaml
+  09-demo-app.yaml
+grafana/
+  dashboard.json
 ```
 
 ## Procédure de déploiement
@@ -106,20 +105,16 @@ Endpoints de test : `/ok`, `/bad-request` (400), `/not-found` (404), `/error` (5
 
 ### Alertes
 
-| Alerte | Expression | `for` |
+| Alerte | Expression | Durée |
 |---|---|---|
-| 1 — Composant indisponible | `up{job=~"prometheus\|alertmanager\|grafana\|node-exporter\|kube-state-metrics\|demo-api"} == 0` ou `kube_deployment_status_replicas_available{namespace=~"monitoring\|demo",deployment=~"prometheus\|alertmanager\|grafana\|kube-state-metrics\|demo-api"} < 1` | 1m |
-| 2 — Trop d'erreurs 5xx | `sum(increase(http_requests_total{job="demo-api",status="5xx"}[5m])) > 20` | 1m |
-| 3 — Alertmanager indisponible (K8s) | `kube_deployment_status_replicas_available{namespace="monitoring",deployment="alertmanager"} < 1` | 2m |
-| 4 — Requêtes lentes | `sum(rate(app_slow_requests_total{job="demo-api"}[5m])) > 0.1` | 2m |
-
-## Seuil X — alerte 5xx
-
-**X = 20** : l'alerte `HighHttp5xxErrors` se déclenche si plus de **20 erreurs 5xx** sont comptabilisées dans une fenêtre de **5 minutes**. Cela permet d'atteindre le seuil facilement avec le script de trafic pour une démo. De plus, il permet tout de même d'ignorer quelques erreurs isolées (par exemple en cas de retry).
+| 1 — Composant indisponible | `up{job=~"prometheus\|alertmanager\|grafana\|node-exporter\|kube-state-metrics\|demo-api"} == 0` ou `kube_deployment_status_replicas_available{namespace=~"monitoring\|demo",deployment=~"prometheus\|alertmanager\|grafana\|kube-state-metrics\|demo-api"} < 1` | 1m (criticité élevée) |
+| 2 — Trop d'erreurs 5xx | `sum(increase(http_requests_total{job="demo-api",status="5xx"}[5m])) > 20` | 1m (criticité élevée) |
+| 3 — Alertmanager indisponible (K8s) | `kube_deployment_status_replicas_available{namespace="monitoring",deployment="alertmanager"} < 1` | 2m (l'état K8s peut mettre quelques secondes à se stabiliser après un restart) |
+| 4 — Requêtes lentes | `sum(rate(app_slow_requests_total{job="demo-api"}[5m])) > 0.1` | 2m (car un pic très court ne justifie pas une notification) |
 
 | Alerte | Méthode | Vérification |
 |---|---|---|
-| 5xx + requêtes lentes | `./app/generate-traffic.sh http://localhost:8080` | `HighHttp5xxErrors`, `HighSlowRequestRate` (`Firing` après 1–2 min) |
+| 5xx + requêtes lentes | `./app/generate-traffic.sh http://localhost:8080` | `HighHttp5xxErrors`, `HighSlowRequestRate` (`Firing` après 1 min) |
 | Composant indisponible | `kubectl -n demo scale deployment demo-api --replicas=0` (puis `--replicas=1`) | `ComponentDown` |
 | Alertmanager indisponible | `kubectl -n monitoring scale deployment alertmanager --replicas=0` (puis `--replicas=1`) | `AlertmanagerDeploymentUnavailable` |
 
