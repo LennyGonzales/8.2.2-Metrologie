@@ -100,15 +100,15 @@ data:
               summary: "Composant obligatoire indisponible"
               description: "Namespace={{ $labels.namespace }}, deployment={{ $labels.deployment }}, job={{ $labels.job }}."
 
-          # Alerte 2 : trop d'erreurs HTTP 5xx (X = 5)
+          # Alerte 2 : trop d'erreurs HTTP 5xx (X = 20)
           - alert: HighHttp5xxErrors
-            expr: sum(increase(http_requests_total{job="demo-api",status="5xx"}[5m])) > 5
+            expr: sum(increase(http_requests_total{job="demo-api",status="5xx"}[5m])) > 20
             for: 1m
             labels:
               severity: warning
             annotations:
               summary: "Trop d'erreurs HTTP 5xx sur demo-api"
-              description: "Plus de 5 erreurs 5xx en 5 minutes sur l'application."
+              description: "Plus de 20 erreurs 5xx en 5 minutes sur l'application."
 
           # Alerte 3 : Alertmanager indisponible dans Kubernetes
           - alert: AlertmanagerDeploymentUnavailable

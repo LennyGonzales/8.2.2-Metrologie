@@ -65,18 +65,20 @@ kubectl -n monitoring get pods
 kubectl -n demo get pods
 ```
 
-Pour accéder aux services :
-Demo api : http://localhost:8080/ok
-Prometheus : http://localhost:9090/targets
-Grafana : http://localhost:3000
-Alertmanager : http://localhost:9093
+## Accès aux services
 
-Pour générer du traffic :
+**Demo api** : http://localhost:8080/ok
+**Prometheus** : http://localhost:9090/targets
+**Grafana** : http://localhost:3000
+**Alertmanager** : http://localhost:9093
+
+## Génération de traffic
+
 ```bash
 ./app/generate-traffic.sh http://localhost:8080
 ```
 
-### 4. Suppression des services
+## Procédure de suppression
 
 ```bash
 kind delete cluster --name gonzales-lenny-prometheus-grafana
@@ -107,19 +109,19 @@ Endpoints de test : `/ok`, `/bad-request` (400), `/not-found` (404), `/error` (5
 | Alerte | Expression | `for` |
 |---|---|---|
 | 1 — Composant indisponible | `up{job=~"prometheus\|alertmanager\|grafana\|node-exporter\|kube-state-metrics\|demo-api"} == 0` ou `kube_deployment_status_replicas_available{namespace=~"monitoring\|demo",deployment=~"prometheus\|alertmanager\|grafana\|kube-state-metrics\|demo-api"} < 1` | 1m |
-| 2 — Trop d'erreurs 5xx | `sum(increase(http_requests_total{job="demo-api",status="5xx"}[5m])) > 5` | 1m |
+| 2 — Trop d'erreurs 5xx | `sum(increase(http_requests_total{job="demo-api",status="5xx"}[5m])) > 20` | 1m |
 | 3 — Alertmanager indisponible (K8s) | `kube_deployment_status_replicas_available{namespace="monitoring",deployment="alertmanager"} < 1` | 2m |
 | 4 — Requêtes lentes | `sum(rate(app_slow_requests_total{job="demo-api"}[5m])) > 0.1` | 2m |
 
 ## Seuil X — alerte 5xx
 
-**X = 5** : l'alerte `HighHttp5xxErrors` se déclenche si plus de **5 erreurs 5xx** sont comptabilisées sur une fenêtre glissante de **5 minutes**. Cela permet d'atteindre le seuil facilement avec le script de trafic (20× `/error` + 10× `/crash`) pour une démo. De plus, il permet tout de même d'ignorer quelques erreurs isolées (par exemple en cas de retry).
+**X = 20** : l'alerte `HighHttp5xxErrors` se déclenche si plus de **20 erreurs 5xx** sont comptabilisées dans une fenêtre de **5 minutes**. Cela permet d'atteindre le seuil facilement avec le script de trafic pour une démo. De plus, il permet tout de même d'ignorer quelques erreurs isolées (par exemple en cas de retry).
 
 | Alerte | Méthode | Vérification |
 |---|---|---|
-| 5xx + requêtes lentes | `./app/generate-traffic.sh http://localhost:8080` | Prometheus → Alerts → `HighHttp5xxErrors`, `HighSlowRequestRate` (`Firing` après 1–2 min) |
-| Composant indisponible | `kubectl -n demo scale deployment demo-api --replicas=0` (puis `--replicas=1`) | `ComponentDown` dans Prometheus et Alertmanager |
-| Alertmanager indisponible | `kubectl -n monitoring scale deployment alertmanager --replicas=0` (puis `--replicas=1`) | `AlertmanagerDeploymentUnavailable` dans Prometheus |
+| 5xx + requêtes lentes | `./app/generate-traffic.sh http://localhost:8080` | `HighHttp5xxErrors`, `HighSlowRequestRate` (`Firing` après 1–2 min) |
+| Composant indisponible | `kubectl -n demo scale deployment demo-api --replicas=0` (puis `--replicas=1`) | `ComponentDown` |
+| Alertmanager indisponible | `kubectl -n monitoring scale deployment alertmanager --replicas=0` (puis `--replicas=1`) | `AlertmanagerDeploymentUnavailable` |
 
 ## Hypothèses et limites
 
