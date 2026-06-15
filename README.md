@@ -1,13 +1,5 @@
 # gonzales-lenny-prometheus-grafana
 
-TP Prometheus, Alertmanager et Grafana — stack de monitoring sur Kubernetes (kind) avec application FastAPI instrumentée.
-
-## Prérequis
-
-- Docker
-- kubectl
-- kind
-
 ## Structure du rendu
 
 ```text
@@ -35,23 +27,9 @@ gonzales-lenny-prometheus-grafana/
     dashboard.json
 ```
 
-## Composants déployés
-
-Les namespaces sont séparés :
-- `monitoring` : stack d'observabilité
-- `demo` : application instrumentée
-
 ## Procédure de déploiement
 
 ### 1. Construire l'image de l'application
-
-| Propriété | Valeur |
-|---|---|
-| Nom logique | `gonzales-lenny-prometheus-grafana-app:1.0.0` |
-| Tag Docker effectif | `gonzales-lenny-prometheus-grafana-app:1.0.0` |
-| Port | `8000` |
-
-> Docker impose des noms de dépôt en minuscules.
 
 ```bash
 cd app
@@ -84,8 +62,6 @@ curl http://localhost:8080/ok
 kind delete cluster --name gonzales-lenny-prometheus-grafana
 ```
 
-## Endpoints de l'application
-
 ## Requêtes PromQL principales
 
 ### Dashboard Grafana
@@ -115,13 +91,17 @@ kind delete cluster --name gonzales-lenny-prometheus-grafana
 ./app/generate-traffic.sh http://localhost:8080
 ```
 
-Vérifier dans Prometheus → Alerts → `HighHttp5xxErrors` (état `Firing` après 1 min).
+Vérifier dans Prometheus → Alerts → `HighHttp5xxErrors` et `HighSlowRequestRate` (état `Firing` après 1 min).
 
 ### Alerte composant indisponible
 
 ```bash
 kubectl -n demo scale deployment demo-api --replicas=0
-# Attendre ~1 min, vérifier ComponentDown dans Prometheus et Alertmanager
+```
+
+Attendre 1 minute, puis, vérifier `ComponentDown` dans Prometheus et Alertmanager
+
+```bash
 kubectl -n demo scale deployment demo-api --replicas=1
 ```
 
@@ -129,14 +109,10 @@ kubectl -n demo scale deployment demo-api --replicas=1
 
 ```bash
 kubectl -n monitoring scale deployment alertmanager --replicas=0
-# Vérifier AlertmanagerDeploymentUnavailable (basée sur kube-state-metrics)
-kubectl -n monitoring scale deployment alertmanager --replicas=1
 ```
 
-### Alerte métrique custom
+Vérifier `AlertmanagerDeploymentUnavailable` dans Prometheus
 
 ```bash
-for i in $(seq 1 20); do curl -s -X POST -o /dev/null http://localhost:8080/trigger-slow; done
+kubectl -n monitoring scale deployment alertmanager --replicas=1
 ```
-
-Vérifier `HighSlowRequestRate` dans Prometheus → Alerts.
