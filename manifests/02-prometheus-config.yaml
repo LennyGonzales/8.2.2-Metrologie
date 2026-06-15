@@ -86,14 +86,13 @@ data:
 
   alerts.yml: |
     groups:
-      - name: tp-alerts
+      - name: alerts
         rules:
           # Alerte 1 : composant obligatoire indisponible (collecte Prometheus)
           - alert: ComponentDown
             expr: |
-              up{job=~"prometheus|alertmanager|grafana|node-exporter|kube-state-metrics"} == 0
-              or up{job="demo-api"} == 0
-              or kube_deployment_status_replicas_available{namespace="demo",deployment="demo-api"} < 1
+              up{job=~"prometheus|alertmanager|grafana|node-exporter|kube-state-metrics|demo-api"} == 0
+              or kube_deployment_status_replicas_available{namespace=~"monitoring|demo",deployment=~"prometheus|alertmanager|grafana|kube-state-metrics|demo-api"} < 1
             for: 1m
             labels:
               severity: critical

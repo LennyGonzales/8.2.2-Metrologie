@@ -9,6 +9,10 @@ nodes:
         nodeRegistration:
           kubeletExtraArgs:
             node-labels: "ingress-ready=true"
+    extraMounts:
+      - hostPath: grafana
+        containerPath: /grafana
+        readOnly: true
     extraPortMappings:
       - containerPort: 30090
         hostPort: 9090

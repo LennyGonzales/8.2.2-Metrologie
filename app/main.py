@@ -66,9 +66,3 @@ async def crash():
         status_code=503,
         media_type="application/json",
     )
-
-
-@app.post("/trigger-slow")
-async def trigger_slow():
-    slow_requests_total.labels(endpoint="/trigger-slow").inc()
-    return {"triggered": True}
