@@ -1,0 +1,132 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: monitoring
+  labels:
+    app: prometheus
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+
+    alerting:
+      alertmanagers:
+        - static_configs:
+            - targets:
+                - alertmanager.monitoring.svc.cluster.local:9093
+
+    rule_files:
+      - /etc/prometheus/alerts.yml
+
+    scrape_configs:
+      - job_name: prometheus
+        static_configs:
+          - targets:
+              - localhost:9090
+
+      - job_name: alertmanager
+        static_configs:
+          - targets:
+              - alertmanager.monitoring.svc.cluster.local:9093
+
+      - job_name: grafana
+        metrics_path: /metrics
+        static_configs:
+          - targets:
+              - grafana.monitoring.svc.cluster.local:3000
+
+      - job_name: node-exporter
+        kubernetes_sd_configs:
+          - role: endpoints
+            namespaces:
+              names:
+                - monitoring
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_service_name]
+            action: keep
+            regex: node-exporter
+          - source_labels: [__meta_kubernetes_endpoint_port_name]
+            action: keep
+            regex: metrics
+
+      - job_name: kube-state-metrics
+        static_configs:
+          - targets:
+              - kube-state-metrics.monitoring.svc.cluster.local:8080
+
+      - job_name: demo-api
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names:
+                - demo
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: true
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          - action: labelmap
+            regex: __meta_kubernetes_pod_label_(.+)
+          - source_labels: [__meta_kubernetes_namespace]
+            action: replace
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            action: replace
+            target_label: pod
+
+  alerts.yml: |
+    groups:
+      - name: tp-alerts
+        rules:
+          # Alerte 1 : composant obligatoire indisponible (collecte Prometheus)
+          - alert: ComponentDown
+            expr: |
+              up{job=~"prometheus|alertmanager|grafana|node-exporter|kube-state-metrics"} == 0
+              or up{job="demo-api"} == 0
+              or kube_deployment_status_replicas_available{namespace="demo",deployment="demo-api"} < 1
+            for: 1m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Composant obligatoire indisponible"
+              description: "Namespace={{ $labels.namespace }}, deployment={{ $labels.deployment }}, job={{ $labels.job }}."
+
+          # Alerte 2 : trop d'erreurs HTTP 5xx (X = 5)
+          - alert: HighHttp5xxErrors
+            expr: sum(increase(http_requests_total{job="demo-api",status="5xx"}[5m])) > 5
+            for: 1m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Trop d'erreurs HTTP 5xx sur demo-api"
+              description: "Plus de 5 erreurs 5xx en 5 minutes sur l'application."
+
+          # Alerte 3 : Alertmanager indisponible dans Kubernetes
+          - alert: AlertmanagerDeploymentUnavailable
+            expr: kube_deployment_status_replicas_available{namespace="monitoring",deployment="alertmanager"} < 1
+            for: 2m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Alertmanager indisponible dans Kubernetes"
+              description: "Le deployment alertmanager n'a plus de replica disponible."
+
+          # Alerte 4 : requetes lentes (metrique custom application)
+          - alert: HighSlowRequestRate
+            expr: sum(rate(app_slow_requests_total{job="demo-api"}[5m])) > 0.1
+            for: 2m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Taux eleve de requetes lentes"
+              description: "Le taux de requetes lentes depasse 0.1/s sur demo-api."
