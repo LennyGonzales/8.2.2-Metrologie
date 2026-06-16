@@ -34,6 +34,7 @@ manifests/
   12-kibana.yaml
   13-filebeat.yaml
   14-air-quality-import.yaml
+  15-kibana-setup.yaml
 grafana/
   dashboard.json
 kibana/
@@ -88,10 +89,18 @@ kubectl apply -f manifests/
 
 ### 5. Attendre que les composants soient prêts
 
+Attendre que les pods passent en `Running` / `Ready` (ES et Kibana peuvent prendre 3–5 min sur kind) :
+
 ```bash
 kubectl get pods -n monitoring -w
 kubectl get pods -n demo -w
 kubectl get pods -n elastic -w
+```
+
+Vérifier l'import Air Quality (~16 000 docs) :
+
+```bash
+kubectl -n elastic exec deploy/elasticsearch -- curl -s 'http://localhost:9200/air-quality-*/_count'
 ```
 
 ### Accès aux services
@@ -174,7 +183,31 @@ Captures d'écran de validation : dossier [`docs/images/`](docs/images/).
 
 ## Composants concernés
 
-Namespace `elastic`. Manifests `10` à `14`, import CSV dans `air-quality-importer/`, objets Kibana exportables dans `kibana/saved_objects.ndjson`.
+Namespace `elastic`. Manifests `10` à `15`, import CSV dans `air-quality-importer/`, objets Kibana dans `kibana/saved_objects.ndjson`.
+
+Images Elastic (version **8.19.16**) :
+
+| Composant | Image |
+| --- | --- |
+| Elasticsearch | `docker.elastic.co/elasticsearch/elasticsearch:8.19.16` |
+| Kibana | `docker.elastic.co/kibana/kibana:8.19.16` |
+| Logstash | `docker.elastic.co/logstash/logstash:8.19.16` |
+| Filebeat | `docker.elastic.co/beats/filebeat:8.19.16` |
+| Import Air Quality | image custom basée sur Logstash 8.19.16 (`air-quality-importer/Dockerfile`) |
+
+## Import objets Kibana
+
+Import automatique au déploiement par le Job `kibana-setup` (`manifests/15-kibana-setup.yaml`) : POST `/api/saved_objects/_import` depuis `kibana/saved_objects.ndjson`.
+
+Relancer manuellement :
+
+```bash
+kubectl -n elastic delete job kibana-setup --ignore-not-found
+kubectl apply -f manifests/15-kibana-setup.yaml
+kubectl -n elastic wait --for=condition=complete job/kibana-setup --timeout=300s
+```
+
+Import manuel possible : **Stack Management → Saved Objects → Import** → `kibana/saved_objects.ndjson`.
 
 ## Import Air Quality
 
@@ -189,7 +222,8 @@ Relancer manuellement l'import :
 ```bash
 kubectl -n elastic delete job air-quality-importer --ignore-not-found
 kubectl apply -f manifests/14-air-quality-import.yaml
-kubectl -n elastic wait --for=condition=complete job/air-quality-importer --timeout=600s
+
+kubectl -n elastic exec deploy/elasticsearch -- curl -s 'http://localhost:9200/air-quality-*/_count'
 ```
 
 ## Chaîne d'ingestion
@@ -204,10 +238,12 @@ demo-api (stdout JSON)
     -> Kibana
 ```
 
-Les logs applicatifs sont distingués des logs techniques via :
+Les logs applicatifs sont distingués des logs techniques via le pipeline Logstash (`manifests/11-logstash.yaml`) :
 
-- le champ `log_source: demo-api` ;
-- l'index dédié `app-logs-*` (vs `stack-logs-*`).
+- filtre sur le pod `demo-api` (namespace `demo`) -> index `app-logs-*`, champ `log_source: demo-api` ;
+- autres logs collectés par Filebeat → index `stack-logs-*`, champ `log_source: kubernetes`.
+
+Comportement métier propre à l'app : route `/slow` (> 2s), événement `slow_response`, champ `duration_ms` élevé.
 
 ## Structuration des logs applicatifs
 
@@ -247,9 +283,7 @@ Aucune donnée sensible n'est loggée.
 
 ## Recherches Kibana (logs applicatifs)
 
-Importer les objets Kibana : **Stack Management -> Saved Objects -> Import** -> `kibana/saved_objects.ndjson`
-
-Data View : `app-logs-*`
+Data View : `app-logs-*` (champ temporel `@timestamp`).
 
 | Recherche | KQL | Capture |
 | --- | --- | --- |
@@ -263,19 +297,32 @@ Alimenter Discover : `./app/generate-traffic.sh http://localhost:8080`, puis tim
 
 ## Recherches Kibana (Air Quality)
 
-Data View : `air-quality-*`
+Data View : `air-quality-*` (champ temporel `@timestamp`).
 
-Time picker recommandé : **2005 -> 2020**.
+Time picker recommandé : **2005 → 2020**.
 
 | Recherche | KQL | Capture |
 | --- | --- | --- |
 | Polluant + valeur | `pollutant: "Ozone (O3)" and data_value > 10` | ![Polluant et data_value](docs/images/air-quality-pollutant-data-value.png) |
-| Polluant + valeur + période | `pollutant: "Ozone (O3)" and data_value > 10 and @timestamp >= "2008-01-01" and @timestamp <= "2014-12-31"` | ![Polluant, data_value et fenêtre temporelle](docs/images/air-quality-pollutant-data-value-timestamp-start-end.png) |
+| Pics 2008–2014 | `pollutant: "Ozone (O3)" and data_value > 10 and @timestamp >= "2008-01-01" and @timestamp <= "2014-12-31"` | ![Polluant, data_value et fenêtre temporelle](docs/images/air-quality-pollutant-data-value-timestamp-start-end.png) |
+| Discover trié | Saved search **Air Quality - top data_value** : colonnes `@timestamp`, `pollutant`, `geo_place_name`, `data_value`, `time_period`, tri `data_value` desc | *(voir panel du dashboard Air Quality)* |
 | Filtre Bronx | `geo_place_name: "Bronx"` | ![Filtre geo_place_name Bronx](docs/images/air-quality-geo-place-name.png) |
 
-## Dashboards Kibana
+## Scénarios de validation
 
-Import : **Stack Management -> Saved Objects -> Import** -> `kibana/saved_objects.ndjson`
+Reproductible via `./app/generate-traffic.sh http://localhost:8080` puis time picker **Last 15 minutes** dans Kibana (`app-logs-*`) :
+
+| Scénario | Routes appelées | Vérification Kibana |
+| --- | --- | --- |
+| Trafic nominal | `/ok` | logs INFO, `status_code: 200` |
+| Erreurs client | `/bad-request`, `/not-found` | `status_code` 400/404, `client_error: true` |
+| Erreurs serveur | `/error`, `/crash` | `status_code` 500/503, `log_level: ERROR` |
+| Comportement `/slow` | `/slow` | `app_event: slow_response`, `duration_ms` élevé |
+| Recherche par corrélation | copier un `request_id` depuis Discover | filtre `request_id: "<valeur>"` |
+| Dashboards app | après trafic | dashboards **Developpeur** et **Support** alimentés |
+| Air Quality | time picker 2005–2020 | index `air-quality-*`, dashboard + filtre Bronx |
+
+## Dashboards Kibana
 
 ### Dashboard développeur
 
