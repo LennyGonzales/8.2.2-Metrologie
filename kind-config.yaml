@@ -16,6 +16,9 @@ nodes:
       - hostPath: datasets
         containerPath: /datasets
         readOnly: true
+      - hostPath: kibana
+        containerPath: /kibana
+        readOnly: true
     extraPortMappings:
       - containerPort: 30090
         hostPort: 9090

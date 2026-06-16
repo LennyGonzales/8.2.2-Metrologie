@@ -64,6 +64,7 @@ docker build -t gonzales-lenny-prometheus-grafana-elk-app:1.0.0 .
 
 cd ../air-quality-importer
 docker build -t gonzales-lenny-prometheus-grafana-elk-air-quality:1.0.0 .
+cd ..
 ```
 
 ### 2. Créer le cluster
@@ -88,20 +89,10 @@ kubectl apply -f manifests/
 ### 5. Attendre que les composants soient prêts
 
 ```bash
-kubectl -n monitoring wait --for=condition=ready pod -l app=prometheus --timeout=120s
-kubectl -n monitoring wait --for=condition=ready pod -l app=alertmanager --timeout=120s
-kubectl -n monitoring wait --for=condition=ready pod -l app=grafana --timeout=120s
-kubectl -n demo wait --for=condition=ready pod -l app=demo-api --timeout=120s
-kubectl -n elastic wait --for=condition=ready pod -l app=elasticsearch --timeout=180s
-kubectl -n elastic wait --for=condition=ready pod -l app=logstash --timeout=180s
-kubectl -n elastic wait --for=condition=ready pod -l app=kibana --timeout=180s
-kubectl -n elastic wait --for=condition=complete job/air-quality-importer --timeout=600s
-
-kubectl -n monitoring get pods
-kubectl -n demo get pods
-kubectl -n elastic get pods
+kubectl get pods -n monitoring -w
+kubectl get pods -n demo -w
+kubectl get pods -n elastic -w
 ```
-
 
 ### Accès aux services
 

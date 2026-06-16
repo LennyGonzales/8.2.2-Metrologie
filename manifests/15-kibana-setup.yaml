@@ -1,0 +1,39 @@
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kibana-setup
+  namespace: elastic
+spec:
+  backoffLimit: 8
+  template:
+    metadata:
+      labels:
+        app: kibana-setup
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: kibana-setup
+          image: curlimages/curl:8.8.0
+          command:
+            - sh
+            - -c
+            - |
+              curl -sf -X POST "http://kibana:5601/api/saved_objects/_import?overwrite=true" \
+                -H "kbn-xsrf: true" \
+                --form file=@/kibana/saved_objects.ndjson
+          volumeMounts:
+            - name: kibana-export
+              mountPath: /kibana
+          resources:
+            requests:
+              memory: "32Mi"
+              cpu: "50m"
+            limits:
+              memory: "64Mi"
+              cpu: "100m"
+      volumes:
+        - name: kibana-export
+          hostPath:
+            path: /kibana
+            type: Directory
