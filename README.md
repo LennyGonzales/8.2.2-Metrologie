@@ -247,7 +247,7 @@ Aucune donnée sensible n'est loggée.
 
 ## Recherches Kibana principales
 
-Import save_object.ndjson
+Importer les objets Kibana : **Stack Management → Saved Objects → Import** → `kibana/saved_objects.ndjson`
 
 | Recherche | KQL |
 | --- | --- |
@@ -268,25 +268,37 @@ Data View : `air-quality-*`
 
 ### Dashboard développeur
 
-Objectif : investiguer un incident technique.
+Dashboard exporté : **`Dashboard Developpeur - Investigation incident`** (`kibana/saved_objects.ndjson`).
 
-Panels recommandés (Lens / Discover) :
+Filtre global : `log_source: "demo-api" and status_code >= 400`
 
-- histogramme des erreurs (`status_code >= 400`) dans le temps ;
-- top routes en erreur ;
-- top messages (`log_message`) ;
-- table des événements récents avec `request_id`, `route`, `status_code`.
+| Panel | Question couverte |
+| --- | --- |
+| Dev - Erreurs dans le temps | Quand ont-elles commencé ? (histogramme temporel) |
+| Dev - Repartition par code HTTP | Où sont les erreurs ? (4xx vs 5xx) |
+| Dev - Top routes en erreur | Quelles routes sont concernées ? |
+| Dev - Top actions en erreur | Quelles actions sont concernées ? |
+| Dev - Top messages en erreur | Quels messages reviennent le plus souvent ? |
+| Dev - Evenements recents a lire | Quels événements récents méritent d'être lus ? (`request_id`, `route`, `status_code`, …) |
+
+Pour alimenter le dashboard : `./app/generate-traffic.sh http://localhost:8080`, puis time picker **Last 15 minutes**.
 
 ### Dashboard support
 
-Objectif : état fonctionnel sans jargon technique.
+Dashboard exporté : **`Dashboard Support - Etat du service`** (`kibana/saved_objects.ndjson`).
 
-Panels recommandés :
+Filtre global : `log_source: "demo-api"` (aucune modification de l'ingestion)
 
-- pourcentage de requêtes OK vs erreurs ;
-- volume de trafic dans le temps ;
-- indicateur « service indisponible » (`status_code >= 500`) ;
-- résumé des requêtes lentes (`event: "slow_response"`).
+| Panel | Question couverte |
+| --- | --- |
+| Support - Repartition OK / erreurs | Pourcentage de requetes OK vs erreurs (camembert) |
+| Support - Pannes detectees (5xx) | Indicateur « service indisponible » |
+| Support - Requetes lentes | Resume des requetes lentes (`app_event: slow_response`) |
+| Support - Volume de trafic | Volume de trafic dans le temps |
+| Support - Lenteurs dans le temps | Evolution des lenteurs |
+| Support - Derniers problemes detectes | Liste lisible (`@timestamp`, message, code) sans jargon technique |
+
+Pour alimenter le dashboard : `./app/generate-traffic.sh http://localhost:8080`, puis time picker **Last 15 minutes**.
 
 ### Dashboard Air Quality
 
