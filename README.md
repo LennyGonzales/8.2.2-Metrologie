@@ -1,6 +1,6 @@
 # gonzales-lenny-prometheus-grafana-elk
 
-Projet combinant le TP Prometheus/Grafana et le TP ELK Stack.
+Projet combinant le TP Prometheus/Grafana et le TP ELK.
 
 ## Structure du projet
 
