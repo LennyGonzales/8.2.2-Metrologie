@@ -302,13 +302,19 @@ Pour alimenter le dashboard : `./app/generate-traffic.sh http://localhost:8080`,
 
 ### Dashboard Air Quality
 
-Créer dans Kibana :
+Dashboard exporté : **`Dashboard Air Quality`** (`kibana/saved_objects.ndjson`).
 
-- Lens time-series : `Average(data_value)` sur `@timestamp`, split par `pollutant` ;
-- heatmap ou table : `pollutant` × `time_period` ;
-- contrôle Options list sur `geo_place_name` (test avec `Bronx`).
+Data View : `air-quality-*` — time picker recommandé : **2005 → 2020**.
 
-Exporter les dashboards finaux dans `kibana/` via **Stack Management -> Saved Objects -> Export**.
+| Panel | Description |
+| --- | --- |
+| Air Quality - Average data_value over time | Lens time-series : `Average(data_value)` sur `@timestamp`, découpé par `pollutant` |
+| Air Quality - Polluant x periode | Heatmap : `Average(data_value)` par `time_period` (axe X) × `pollutant` (axe Y) |
+| Air Quality - Table polluant x periode | Table de comparaison par polluant et période |
+| Air Quality - top data_value | Discover sauvegardé : champs utiles triés par `data_value` desc |
+| Contrôle **Lieu geographique** | Options list sur `geo_place_name` (test avec `Bronx`) |
+
+Import : **Stack Management → Saved Objects → Import** → `kibana/saved_objects.ndjson` (Overwrite).
 
 ## Hypothèses et limites
 
