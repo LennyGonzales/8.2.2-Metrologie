@@ -21,7 +21,7 @@ spec:
     spec:
       containers:
         - name: demo-api
-          image: gonzales-lenny-prometheus-grafana-app:1.0.0
+          image: gonzales-lenny-prometheus-grafana-elk-app:1.0.0
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

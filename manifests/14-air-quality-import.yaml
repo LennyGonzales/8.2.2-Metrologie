@@ -1,0 +1,38 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: air-quality-importer
+  namespace: elastic
+  labels:
+    app: air-quality-importer
+spec:
+  backoffLimit: 8
+  template:
+    metadata:
+      labels:
+        app: air-quality-importer
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: air-quality-importer
+          image: gonzales-lenny-prometheus-grafana-elk-air-quality:1.0.0
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: XPACK_MONITORING_ENABLED
+              value: "false"
+          volumeMounts:
+            - name: datasets
+              mountPath: /datasets
+              readOnly: true
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "300m"
+            limits:
+              memory: "768Mi"
+              cpu: "600m"
+      volumes:
+        - name: datasets
+          hostPath:
+            path: /datasets
+            type: Directory

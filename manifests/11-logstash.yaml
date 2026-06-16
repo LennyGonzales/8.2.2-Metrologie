@@ -1,0 +1,155 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: logstash-config
+  namespace: elastic
+  labels:
+    app: logstash
+data:
+  logstash.yml: |
+    http.host: "0.0.0.0"
+    pipeline.workers: 1
+    path.config: /usr/share/logstash/pipeline/app-logs.conf
+  app-logs.conf: |
+    input {
+      beats {
+        port => 5044
+      }
+    }
+
+    filter {
+      if [kubernetes][namespace] == "demo" and [kubernetes][labels][app] == "demo-api" {
+        json {
+          source => "message"
+          target => "app"
+          skip_on_invalid_json => true
+        }
+
+        if [app][timestamp] {
+          date {
+            match => ["[app][timestamp]", "ISO8601"]
+            target => "@timestamp"
+          }
+        }
+
+        mutate {
+          add_field => {
+            "[@metadata][target_index]" => "app-logs"
+            "log_source" => "demo-api"
+          }
+          remove_field => ["event"]
+          rename => {
+            "[app][level]" => "log_level"
+            "[app][message]" => "log_message"
+            "[app][request_id]" => "request_id"
+            "[app][route]" => "route"
+            "[app][method]" => "method"
+            "[app][status_code]" => "status_code"
+            "[app][duration_ms]" => "duration_ms"
+            "[app][event]" => "app_event"
+            "[app][action]" => "action"
+            "[app][service]" => "service"
+            "[app][client_error]" => "client_error"
+          }
+          remove_field => ["app"]
+        }
+      } else {
+        mutate {
+          add_field => {
+            "[@metadata][target_index]" => "stack-logs"
+            "log_source" => "kubernetes"
+          }
+        }
+      }
+    }
+
+    output {
+      if [@metadata][target_index] == "app-logs" {
+        elasticsearch {
+          hosts => ["http://elasticsearch.elastic.svc.cluster.local:9200"]
+          index => "app-logs-%{+YYYY.MM.dd}"
+        }
+      } else {
+        elasticsearch {
+          hosts => ["http://elasticsearch.elastic.svc.cluster.local:9200"]
+          index => "stack-logs-%{+YYYY.MM.dd}"
+        }
+      }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: logstash
+  namespace: elastic
+  labels:
+    app: logstash
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: logstash
+  template:
+    metadata:
+      labels:
+        app: logstash
+    spec:
+      containers:
+        - name: logstash
+          image: docker.elastic.co/logstash/logstash:8.19.16
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: beats
+              containerPort: 5044
+            - name: api
+              containerPort: 9600
+          env:
+            - name: LS_JAVA_OPTS
+              value: "-Xms256m -Xmx256m"
+          volumeMounts:
+            - name: config
+              mountPath: /usr/share/logstash/config/logstash.yml
+              subPath: logstash.yml
+            - name: pipeline
+              mountPath: /usr/share/logstash/pipeline
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /
+              port: api
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: api
+            initialDelaySeconds: 60
+            periodSeconds: 20
+      volumes:
+        - name: config
+          configMap:
+            name: logstash-config
+        - name: pipeline
+          configMap:
+            name: logstash-config
+            items:
+              - key: app-logs.conf
+                path: app-logs.conf
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: logstash
+  namespace: elastic
+  labels:
+    app: logstash
+spec:
+  selector:
+    app: logstash
+  ports:
+    - name: beats
+      port: 5044
+      targetPort: beats
+    - name: api
+      port: 9600
+      targetPort: api
