@@ -38,6 +38,13 @@ grafana/
   dashboard.json
 kibana/
   saved_objects.ndjson
+docs/
+  images/
+    dashboard-developer.png
+    dashboard-support.png
+    dashboard-air-quality.png
+    app-logs-*.png
+    air-quality-*.png
 ```
 
 ## Déploiement et exploitation
@@ -172,6 +179,8 @@ Endpoints de test : `/ok`, `/bad-request` (400), `/not-found` (404), `/error` (5
 
 # 2. ELK
 
+Captures d'écran de validation : dossier [`docs/images/`](docs/images/).
+
 ## Composants concernés
 
 Namespace `elastic`. Manifests `10` à `14`, import CSV dans `air-quality-importer/`, objets Kibana exportables dans `kibana/saved_objects.ndjson`.
@@ -245,82 +254,92 @@ Champs utiles pour Kibana :
 
 Aucune donnée sensible n'est loggée.
 
-## Recherches Kibana principales
+## Recherches Kibana (logs applicatifs)
 
-Importer les objets Kibana : **Stack Management → Saved Objects → Import** → `kibana/saved_objects.ndjson`
+Importer les objets Kibana : **Stack Management -> Saved Objects -> Import** -> `kibana/saved_objects.ndjson`
 
-| Recherche | KQL |
-| --- | --- |
-| Temporelle | Ajuster la time picker |
-| Par niveau | `log_level: "ERROR"` |
-| Par route | `route: "/error"` |
-| Par request id | `request_id: "<valeur copiée depuis Discover>"` |
-| Erreurs | `status_code >= 400` |
+Data View : `app-logs-*`
+
+| Recherche | KQL | Capture |
+| --- | --- | --- |
+| Temporelle | Ajuster la time picker | ![Discover app-logs](docs/images/app-logs-no-filter.png) |
+| Par niveau | `log_level: "ERROR"` | ![Recherche par niveau ERROR](docs/images/app-logs-log-level-error.png) |
+| Par route | `route: "/error"` | ![Recherche par route](docs/images/app-logs-route-error.png) |
+| Par request id | `request_id: "<valeur>"` | ![Recherche par request id](docs/images/app-logs-request-id.png) |
+| Erreurs | `status_code >= 400` | ![Recherche erreurs 4xx/5xx](docs/images/app-logs-status-code-400.png) |
+
+Alimenter Discover : `./app/generate-traffic.sh http://localhost:8080`, puis time picker **Last 15 minutes**.
+
+## Recherches Kibana (Air Quality)
 
 Data View : `air-quality-*`
 
-| Recherche | KQL |
-| --- | --- |
-| Polluant + valeur + période | `pollutant: "Ozone (O3)" and data_value > 10 and @timestamp >= "2008-01-01" and @timestamp <= "2014-12-31"` |
-| Filtre Bronx | `geo_place_name: "Bronx"` |
+Time picker recommandé : **2005 -> 2020**.
+
+| Recherche | KQL | Capture |
+| --- | --- | --- |
+| Polluant + valeur | `pollutant: "Ozone (O3)" and data_value > 10` | ![Polluant et data_value](docs/images/air-quality-pollutant-data-value.png) |
+| Polluant + valeur + période | `pollutant: "Ozone (O3)" and data_value > 10 and @timestamp >= "2008-01-01" and @timestamp <= "2014-12-31"` | ![Polluant, data_value et fenêtre temporelle](docs/images/air-quality-pollutant-data-value-timestamp-start-end.png) |
+| Filtre Bronx | `geo_place_name: "Bronx"` | ![Filtre geo_place_name Bronx](docs/images/air-quality-geo-place-name.png) |
 
 ## Dashboards Kibana
 
-### Dashboard développeur
+Import : **Stack Management -> Saved Objects -> Import** -> `kibana/saved_objects.ndjson`
 
-Dashboard exporté : **`Dashboard Developpeur - Investigation incident`** (`kibana/saved_objects.ndjson`).
+### Dashboard développeur
 
 Filtre global : `log_source: "demo-api" and status_code >= 400`
 
 | Panel | Question couverte |
 | --- | --- |
-| Dev - Erreurs dans le temps | Quand ont-elles commencé ? (histogramme temporel) |
+| Dev - Erreurs dans le temps | Quand ont-elles commencé ? |
 | Dev - Repartition par code HTTP | Où sont les erreurs ? (4xx vs 5xx) |
 | Dev - Top routes en erreur | Quelles routes sont concernées ? |
 | Dev - Top actions en erreur | Quelles actions sont concernées ? |
 | Dev - Top messages en erreur | Quels messages reviennent le plus souvent ? |
-| Dev - Evenements recents a lire | Quels événements récents méritent d'être lus ? (`request_id`, `route`, `status_code`, …) |
+| Dev - Evenements recents a lire | Quels événements récents méritent d'être lus ? |
+
+![Dashboard developpeur](docs/images/dashboard-developer.png)
 
 Pour alimenter le dashboard : `./app/generate-traffic.sh http://localhost:8080`, puis time picker **Last 15 minutes**.
 
 ### Dashboard support
 
-Dashboard exporté : **`Dashboard Support - Etat du service`** (`kibana/saved_objects.ndjson`).
-
-Filtre global : `log_source: "demo-api"` (aucune modification de l'ingestion)
+Filtre global : `log_source: "demo-api"`
 
 | Panel | Question couverte |
 | --- | --- |
-| Support - Repartition OK / erreurs | Pourcentage de requetes OK vs erreurs (camembert) |
+| Support - Repartition OK / erreurs | Pourcentage de requetes OK vs erreurs |
 | Support - Pannes detectees (5xx) | Indicateur « service indisponible » |
-| Support - Requetes lentes | Resume des requetes lentes (`app_event: slow_response`) |
+| Support - Requetes lentes | Resume des requetes lentes |
 | Support - Volume de trafic | Volume de trafic dans le temps |
 | Support - Lenteurs dans le temps | Evolution des lenteurs |
-| Support - Derniers problemes detectes | Liste lisible (`@timestamp`, message, code) sans jargon technique |
+| Support - Derniers problemes detectes | Liste lisible sans jargon technique |
+
+![Dashboard support](docs/images/dashboard-support.png)
 
 Pour alimenter le dashboard : `./app/generate-traffic.sh http://localhost:8080`, puis time picker **Last 15 minutes**.
 
 ### Dashboard Air Quality
 
-Dashboard exporté : **`Dashboard Air Quality`** (`kibana/saved_objects.ndjson`).
-
-Data View : `air-quality-*` — time picker recommandé : **2005 → 2020**.
-
 | Panel | Description |
 | --- | --- |
-| Air Quality - Average data_value over time | Lens time-series : `Average(data_value)` sur `@timestamp`, découpé par `pollutant` |
-| Air Quality - Polluant x periode | Heatmap : `Average(data_value)` par `time_period` (axe X) × `pollutant` (axe Y) |
-| Air Quality - Table polluant x periode | Table de comparaison par polluant et période |
-| Air Quality - top data_value | Discover sauvegardé : champs utiles triés par `data_value` desc |
-| Contrôle **Lieu geographique** | Options list sur `geo_place_name` (test avec `Bronx`) |
+| Air Quality - Average data_value over time | Lens time-series : `Average(data_value)` sur `@timestamp`, decoupe par `pollutant` |
+| Air Quality - Polluant x periode | Heatmap : `Average(data_value)` par `time_period` x `pollutant` |
+| Air Quality - Table polluant x periode | Table de comparaison par polluant et periode |
+| Air Quality - top data_value | Discover sauvegarde : champs utiles tries par `data_value` desc |
+| Controle **Lieu geographique** | Options list sur `geo_place_name` (test avec `Bronx`) |
 
-Import : **Stack Management → Saved Objects → Import** → `kibana/saved_objects.ndjson` (Overwrite).
+![Dashboard Air Quality](docs/images/dashboard-air-quality.png)
+
+![Dashboard Air Quality Bronx](docs/images/dashboard-air-quality-bronx.png)
+
 
 ## Hypothèses et limites
 
 - Utilisation d'un environnement **kind** local (stockage Elasticsearch éphémère (`emptyDir`)).
 - Sécurité Elastic désactivée (`xpack.security.enabled=false`).
-- Elasticsearch limité à 512 Mo de heap.
+- Elasticsearch limité à 256 Mo de heap.
 - Latence d'ingestion : 30 à 60 s entre génération de trafic et visibilité dans Kibana.
 - L'import Air Quality (~16 000 lignes) peut prendre plusieurs minutes au premier lancement.
 
